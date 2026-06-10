@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from kubernetes import client as kube_client
@@ -128,3 +129,38 @@ def test_endpointslice_oracle_detects_missing_ips(monkeypatch):
 
     assert result["success"] is False
     assert result["missing_endpoint_ips"] == ["10.0.0.2"]
+
+
+def test_inject_stale_endpointslice_patches_top_level_endpoints(monkeypatch):
+    from sregym.generators.fault.inject_virtual import VirtualizationFaultInjector
+
+    commands = []
+
+    class FakeKubeCtl:
+        def get_service_json(self, service_name, namespace):
+            return {"spec": {"selector": {"io.kompose.service": "frontend"}}}
+
+        def exec_command(self, command):
+            commands.append(command)
+            if command.startswith("kubectl get pods"):
+                return json.dumps(
+                    {
+                        "items": [
+                            {
+                                "metadata": {"name": "frontend-1"},
+                                "status": {"phase": "Running", "podIP": "10.0.0.2"},
+                            }
+                        ]
+                    }
+                )
+            if command.startswith("kubectl get endpointslice"):
+                return json.dumps({"items": [{"metadata": {"name": "frontend-slice"}, "endpoints": []}]})
+            return ""
+
+    injector = VirtualizationFaultInjector(namespace="default")
+    injector.kubectl = FakeKubeCtl()
+
+    injector.inject_stale_endpointslice_after_rollout(["frontend"])
+
+    assert any("/endpoints/-" in cmd for cmd in commands), "Expected patch against top-level endpoints"
+    assert any("kubectl patch endpointslice frontend-slice" in cmd for cmd in commands)

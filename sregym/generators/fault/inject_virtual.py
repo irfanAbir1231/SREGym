@@ -489,7 +489,7 @@ class VirtualizationFaultInjector(FaultInjector):
             "conditions": {"ready": True, "serving": True, "terminating": False},
         }
 
-        patch = json.dumps([{"op": "add", "path": "/spec/endpoints/-", "value": patch_value}])
+        patch = json.dumps([{"op": "add", "path": "/endpoints/-", "value": patch_value}])
         self.kubectl.exec_command(
             f"kubectl patch endpointslice {slice_name} -n {self.namespace} --type=json -p='{patch}'"
         )
@@ -529,7 +529,7 @@ class VirtualizationFaultInjector(FaultInjector):
             ]
 
             if filtered_endpoints != endpoints:
-                patch_body = {"spec": {"endpoints": filtered_endpoints}}
+                patch_body = {"endpoints": filtered_endpoints}
                 patch = json.dumps(patch_body)
                 self.kubectl.exec_command(
                     f"kubectl patch endpointslice {slice_name} -n {self.namespace} --type=merge -p='{patch}'"
